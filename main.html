@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Case File #044: The Swallowed Stack Trace — Java Exception Handling</title>
+  <style>
+    :root {
+      --bg-dark: #090d14;
+      --bg-panel: #111824;
+      --bg-card: #162030;
+      --bg-code: #070a10;
+      --border: #25344d;
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.16);
+      --cyan: #38bdf8;
+      --cyan-glow: rgba(56, 189, 248, 0.14);
+      --crimson: #ef4444;
+      --crimson-glow: rgba(239, 68, 68, 0.16);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.16);
+      --purple: #c084fc;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --font-mono: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(circle at 12% 18%, rgba(239, 68, 68, 0.06) 0%, transparent 42%),
+        radial-gradient(circle at 88% 82%, rgba(56, 189, 248, 0.06) 0%, transparent 42%);
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 22px 18px 60px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 22px;
+    }
+
+    .badge-case {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--crimson);
+      background: var(--crimson-glow);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 4px 10px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      font-size: 1.72rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #f8fafc;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+
+    .status-board {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      padding: 8px 13px;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .stat-pill span {
+      color: var(--cyan);
+      font-weight: 700;
+    }
+
+    /* Act Navigation */
+    .act-nav {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 760px) {
+      .act-nav { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .act-tab {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      text-align: left;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .act-tab:hover:not(.locked) {
+      border-color: var(--cyan);
+      color: var(--text-main);
+    }
+
+    .act-tab.active {
+      background: var(--bg-card);
+      border-color: var(--amber);
+      color: #fff;
+      box-shadow: 0 0 18px var(--amber-glow);
+    }
+
+    .act-tab.completed { border-color: var(--emerald); }
+
+    .act-tab.locked {
+      opacity: 0.48;
+      cursor: not-allowed;
+    }
+
+    .act-tab .act-num {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--amber);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .act-tab.completed .act-num { color: var(--emerald); }
+    .act-tab .act-title { font-weight: 700; font-size: 0.9rem; }
+
+    /* Panels */
+    .act-screen { display: none; animation: fadeIn 0.28s ease; }
+    .act-screen.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .panel-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .noir-quote {
+      border-left: 3px solid var(--amber);
+      background: rgba(245, 158, 11, 0.06);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      font-style: italic;
+      color: #cbd5e1;
+      margin-bottom: 18px;
+      font-size: 0.94rem;
+    }
+
+    /* Code Blocks */
+    pre, .code-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 15px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      overflow-x: auto;
+      color: #e2e8f0;
+      line-height: 1.55;
+    }
+
+    .kw { color: #c084fc; font-weight: 600; }
+    .type { color: #38bdf8; }
+    .fn { color: #60a5fa; }
+    .str { color: #34d399; }
+    .num { color: #fbbf24; }
+    .ann { color: #f472b6; }
+    .cmt { color: #64748b; font-style: italic; }
+    .err-hl { background: rgba(239, 68, 68, 0.16); border-left: 3px solid var(--crimson); display: block; padding-left: 8px; margin-left: -11px; }
+
+    /* Grids & Cards */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 720px) {
+      .grid-2, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    .clue-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .clue-item:hover {
+      border-color: var(--cyan);
+      transform: translateY(-2px);
+    }
+
+    .clue-item.discovered {
+      border-color: var(--emerald);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .clue-tag {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .clue-item.discovered .clue-tag { color: var(--emerald); }
+
+    /* Suspect Cards */
+    .suspect-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .suspect-card:hover { border-color: var(--cyan); }
+    .suspect-card.selected {
+      border-color: var(--amber);
+      box-shadow: 0 0 18px var(--amber-glow);
+    }
+    .suspect-card.inspected { border-top: 3px solid var(--emerald); }
+
+    .suspect-role {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--amber);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .suspect-name {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #fff;
+      word-break: break-word;
+    }
+
+    /* Buttons */
+    .btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 10px 16px;
+      border-radius: 7px;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .btn:hover:not(:disabled) {
+      border-color: var(--cyan);
+      background: #1e2b40;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--amber);
+      color: #090d14;
+      border-color: var(--amber);
+      font-weight: 700;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #fbbf24;
+      border-color: #fbbf24;
+    }
+
+    .btn-success {
+      background: var(--emerald);
+      color: #062118;
+      border-color: var(--emerald);
+      font-weight: 700;
+    }
+
+    /* Verification Option Buttons (Enhanced Wrong/Correct States) */
+    .opt-btn {
+      justify-content: space-between;
+      text-align: left;
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+
+    .opt-btn.wrong-selected {
+      background: var(--crimson-glow) !important;
+      border-color: var(--crimson) !important;
+      color: #fca5a5 !important;
+      animation: shake 0.34s ease;
+    }
+
+    .opt-btn.correct-selected {
+      background: var(--emerald-glow) !important;
+      border-color: var(--emerald) !important;
+      color: #6ee7b7 !important;
+      font-weight: 700;
+    }
+
+    .opt-badge {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Call Stack Visualization */
+    .stack-container {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .stack-frame {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cyan);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 0.83rem;
+      transition: all 0.25s;
+    }
+
+    .stack-frame.throwing {
+      border-color: var(--crimson);
+      border-left-color: var(--crimson);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .stack-frame.swallowed {
+      border-color: var(--amber);
+      border-left-color: var(--amber);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .stack-frame.unreached {
+      opacity: 0.5;
+      border-left-color: var(--text-muted);
+    }
+
+    /* Feedback Banners */
+    .feedback {
+      margin-top: 14px;
+      padding: 13px 15px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .feedback.show { display: block; animation: fadeIn 0.2s ease; }
+    .feedback.success {
+      background: var(--emerald-glow);
+      border: 1px solid var(--emerald);
+      color: #a7f3d0;
+    }
+    .feedback.error {
+      background: var(--crimson-glow);
+      border: 1px solid var(--crimson);
+      color: #fecaca;
+    }
+    .feedback.info {
+      background: var(--cyan-glow);
+      border: 1px solid var(--cyan);
+      color: #bae6fd;
+    }
+
+    /* Code Editor Area */
+    textarea.code-editor {
+      width: 100%;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      color: #38bdf8;
+      min-height: 150px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    textarea.code-editor:focus {
+      outline: none;
+      border-color: var(--amber);
+    }
+
+    .chip-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 10px 0 14px;
+    }
+
+    .code-chip {
+      background: #1a2639;
+      border: 1px solid #314563;
+      color: #cbd5e1;
+      font-family: var(--font-mono);
+      font-size: 0.77rem;
+      padding: 5px 9px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .code-chip:hover {
+      border-color: var(--amber);
+      color: #fff;
+    }
+
+    .test-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+    }
+
+    .test-table th, .test-table td {
+      border: 1px solid var(--border);
+      padding: 9px 11px;
+      text-align: left;
+    }
+
+    .test-table th { background: var(--bg-code); color: var(--text-muted); }
+    .pass { color: var(--emerald); font-weight: 700; }
+    .fail { color: var(--crimson); font-weight: 700; }
+
+    /* Modal Warning Pop-up */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 14, 0.82);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 999;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-box {
+      background: var(--bg-panel);
+      border: 1px solid var(--amber);
+      box-shadow: 0 0 32px rgba(245, 158, 11, 0.25);
+      border-radius: 12px;
+      max-width: 480px;
+      width: 100%;
+      padding: 22px;
+    }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--amber);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-body {
+      color: var(--text-main);
+      font-size: 0.92rem;
+      margin-bottom: 18px;
+      line-height: 1.55;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <div class="badge-case">Runtime City Precinct • Case File #044</div>
+        <h1>The Swallowed Stack Trace</h1>
+        <div class="subtitle">A Java Exception Handling Mystery: Checked vs. Unchecked, Stack Unwinding &amp; Try-With-Resources</div>
+      </div>
+      <div class="status-board">
+        <div class="stat-pill">Evidence: <span id="clue-count">0/3</span></div>
+        <div class="stat-pill">Rank: <span id="detective-rank">Junior Debugger</span></div>
+      </div>
+    </header>
+
+    <nav class="act-nav">
+      <button class="act-tab active" id="tab-1" onclick="switchAct(1)">
+        <span class="act-num">Act I • Forensics</span>
+        <span class="act-title">The Silent Crash</span>
+      </button>
+      <button class="act-tab locked" id="tab-2" onclick="switchAct(2)">
+        <span class="act-num">Act II • Throwable Lineup</span>
+        <span class="act-title">Checked vs. Unchecked</span>
+      </button>
+      <button class="act-tab locked" id="tab-3" onclick="switchAct(3)">
+        <span class="act-num">Act III • JVM Stack Lab</span>
+        <span class="act-title">Unwinding &amp; finally</span>
+      </button>
+      <button class="act-tab locked" id="tab-4" onclick="switchAct(4)">
+        <span class="act-num">Act IV • The Patch</span>
+        <span class="act-title">Try-With-Resources</span>
+      </button>
+    </nav>
+
+    <!-- ACT I: CRIME SCENE -->
+    <section class="act-screen active" id="act-1">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">01. Production Incident Report — 03:17 AM</div>
+          <span class="badge-case" style="margin:0;">Severity: CRITICAL</span>
+        </div>
+        <div class="noir-quote">
+          "₹50,000 vanished from <code>Account#A101</code>, never arrived at <code>Account#B202</code>, and the vault door was left wide open. Worse? <code>stderr</code> is completely blank. Somebody caught an exception and buried the stack trace."
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:6px;">RECOVERED SOURCE: <code>VaultTransferService.java</code></p>
+            <pre><span class="kw">public void</span> <span class="fn">transferFunds</span>(<span class="type">Account</span> src, <span class="type">Account</span> dst, <span class="kw">double</span> amt) {
+  <span class="type">VaultLock</span> lock = <span class="kw">new</span> <span class="type">VaultLock</span>(); <span class="cmt">// implements AutoCloseable</span>
+  <span class="kw">try</span> {
+    lock.<span class="fn">acquire</span>();
+    src.<span class="fn">debit</span>(amt);               <span class="cmt">// Deducts ₹50,000</span>
+<span class="err-hl">    ledger.<span class="fn">syncRemote</span>(src, dst);  <span class="cmt">// Throws IOException!</span></span>
+    dst.<span class="fn">credit</span>(amt);              <span class="cmt">// Never reached!</span>
+    lock.<span class="fn">close</span>();                 <span class="cmt">// Skipped on failure!</span>
+  } <span class="kw">catch</span> (<span class="type">Exception</span> e) {
+<span class="err-hl">    <span class="cmt">// Swallowed! No logging, no rethrow, no rollback</span></span>
+  }
+}</pre>
+          </div>
+          <div>
+            <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:6px;">POST-INCIDENT HEAP &amp; LOG SNAPSHOT</p>
+            <pre><span class="cmt">// Application Console (stderr)</span>
+&lt;EMPTY — 0 stack frames printed&gt;
+
+<span class="cmt">// Heap State After Method Exit</span>
+Account#A101 balance : <span class="num">0.0</span>     <span class="cmt">// Expected: 50000.0</span>
+Account#B202 balance : <span class="num">0.0</span>     <span class="cmt">// Expected: 0.0</span>
+VaultLock.isLocked   : <span class="kw">true</span>    <span class="cmt">// RESOURCE LEAK!</span></pre>
+          </div>
+        </div>
+
+        <h3 style="font-size:0.98rem; margin: 20px 0 10px; color: var(--amber);">Click all 3 forensic anomalies to log evidence:</h3>
+        <div class="grid-3" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px;">
+          <div class="clue-item" id="clue-1" onclick="discoverClue(1)">
+            <span class="clue-tag">Anomaly #1 • Empty Catch Block</span>
+            <strong>Swallowed Exception</strong>
+            <p style="font-size:0.84rem; color:var(--text-muted); margin-top:4px;">Catching broad <code>Exception</code> with an empty body hides the root cause and tricks callers into thinking the transfer succeeded.</p>
+          </div>
+          <div class="clue-item" id="clue-2" onclick="discoverClue(2)">
+            <span class="clue-tag">Anomaly #2 • Leaked AutoCloseable</span>
+            <strong>Unclosed VaultLock</strong>
+            <p style="font-size:0.84rem; color:var(--text-muted); margin-top:4px;">Because <code>syncRemote()</code> threw before <code>lock.close()</code>, the lock stayed open without a <code>finally</code> or <code>try-with-resources</code> block.</p>
+          </div>
+          <div class="clue-item" id="clue-3" onclick="discoverClue(3)">
+            <span class="clue-tag">Anomaly #3 • Non-Atomic State</span>
+            <strong>Orphaned Debit</strong>
+            <p style="font-size:0.84rem; color:var(--text-muted); margin-top:4px;"><code>src.debit(amt)</code> mutated state before <code>IOException</code> aborted <code>dst.credit(amt)</code>, leaving the ledger unbalanced.</p>
+          </div>
+        </div>
+
+        <div class="feedback" id="act1-feedback"></div>
+        <div style="margin-top:18px; display:flex; justify-content:flex-end;">
+          <button class="btn btn-primary" id="btn-to-act2" disabled onclick="unlockAndGo(2)">Proceed to Throwable Lineup &rarr;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT II: SUSPECTS -->
+    <section class="act-screen" id="act-2">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">02. The java.lang.Throwable Lineup</div>
+          <span class="stat-pill" style="padding:4px 10px;">Inspected: <span id="inspected-count">0/4</span></span>
+        </div>
+        <div class="noir-quote">
+          "Every exception in Java descends from <code>Throwable</code>—but they don't play by the same rules. Some have to declare themselves to <code>javac</code> at compile time; others ambush the JVM at runtime. Click each suspect to inspect their dossier first."
+        </div>
+
+        <div class="grid-4">
+          <div class="suspect-card" id="card-io" onclick="inspectSuspect('io')">
+            <div>
+              <div class="suspect-role">Suspect A • Checked</div>
+              <div class="suspect-name">java.io.IOException</div>
+              <p style="font-size:0.82rem; color:var(--text-muted);">Extends <code>Exception</code> directly (not <code>RuntimeException</code>).</p>
+            </div>
+            <div style="margin-top:10px; font-family:var(--font-mono); font-size:0.74rem; color:var(--cyan);">[Inspect Dossier]</div>
+          </div>
+
+          <div class="suspect-card" id="card-npe" onclick="inspectSuspect('npe')">
+            <div>
+              <div class="suspect-role">Suspect B • Unchecked</div>
+              <div class="suspect-name">NullPointerException</div>
+              <p style="font-size:0.82rem; color:var(--text-muted);">Extends <code>RuntimeException</code>. Strikes when dereferencing <code>null</code>.</p>
+            </div>
+            <div style="margin-top:10px; font-family:var(--font-mono); font-size:0.74rem; color:var(--cyan);">[Inspect Dossier]</div>
+          </div>
+
+          <div class="suspect-card" id="card-oom" onclick="inspectSuspect('oom')">
+            <div>
+              <div class="suspect-role">Suspect C • JVM Error</div>
+              <div class="suspect-name">OutOfMemoryError</div>
+              <p style="font-size:0.82rem; color:var(--text-muted);">Extends <code>java.lang.Error</code>. Serious heap exhaustion.</p>
+            </div>
+            <div style="margin-top:10px; font-family:var(--font-mono); font-size:0.74rem; color:var(--cyan);">[Inspect Dossier]</div>
+          </div>
+
+          <div class="suspect-card" id="card-fnf" onclick="inspectSuspect('fnf')">
+            <div>
+              <div class="suspect-role">Suspect D • Checked Subclass</div>
+              <div class="suspect-name">FileNotFoundException</div>
+              <p style="font-size:0.82rem; color:var(--text-muted);">A direct subclass of <code>IOException</code>.</p>
+            </div>
+            <div style="margin-top:10px; font-family:var(--font-mono); font-size:0.74rem; color:var(--cyan);">[Inspect Dossier]</div>
+          </div>
+        </div>
+
+        <div id="dossier-box" style="margin-top:16px; display:none;">
+          <pre id="dossier-code"></pre>
+        </div>
+
+        <div style="margin-top:22px; padding-top:18px; border-top:1px solid var(--border);">
+          <h3 style="font-size:1rem; color:var(--amber); margin-bottom:12px;">Interrogation Verification Checks (Inspect all 4 suspects first):</h3>
+          <div class="grid-2">
+            <!-- Question 1 -->
+            <div style="background:var(--bg-card); padding:15px; border-radius:8px; border:1px solid var(--border);">
+              <p style="font-size:0.9rem; margin-bottom:10px;"><strong>1.</strong> Which suspect forced the author of <code>transferFunds()</code> to write a <code>try-catch</code> block (or declare <code>throws</code>) so the code would compile?</p>
+              <div id="q1-options" style="display:flex; flex-direction:column; gap:8px;">
+                <button class="btn opt-btn" data-q="q1" data-choice="io" onclick="answerQ1('io', this)">
+                  <span>A) <code>IOException</code> (Checked Exception)</span>
+                  <span class="opt-badge" id="badge-q1-io"></span>
+                </button>
+                <button class="btn opt-btn" data-q="q1" data-choice="npe" onclick="answerQ1('npe', this)">
+                  <span>B) <code>NullPointerException</code> (Unchecked)</span>
+                  <span class="opt-badge" id="badge-q1-npe"></span>
+                </button>
+                <button class="btn opt-btn" data-q="q1" data-choice="oom" onclick="answerQ1('oom', this)">
+                  <span>C) <code>OutOfMemoryError</code> (JVM Error)</span>
+                  <span class="opt-badge" id="badge-q1-oom"></span>
+                </button>
+              </div>
+              <div class="feedback" id="q1-feedback"></div>
+            </div>
+
+            <!-- Question 2 -->
+            <div style="background:var(--bg-card); padding:15px; border-radius:8px; border:1px solid var(--border);">
+              <p style="font-size:0.9rem; margin-bottom:10px;"><strong>2.</strong> If a method catches both <code>IOException</code> and <code>FileNotFoundException</code>, which must come <strong>first</strong> to avoid a compiler error?</p>
+              <div id="q2-options" style="display:flex; flex-direction:column; gap:8px;">
+                <button class="btn opt-btn" data-q="q2" data-choice="fnf" onclick="answerQ2('fnf', this)">
+                  <span>A) <code>FileNotFoundException</code> (Subclass first)</span>
+                  <span class="opt-badge" id="badge-q2-fnf"></span>
+                </button>
+                <button class="btn opt-btn" data-q="q2" data-choice="io" onclick="answerQ2('io', this)">
+                  <span>B) <code>IOException</code> (Superclass first)</span>
+                  <span class="opt-badge" id="badge-q2-io"></span>
+                </button>
+                <button class="btn opt-btn" data-q="q2" data-choice="any" onclick="answerQ2('any', this)">
+                  <span>C) Either order compiles identically in Java</span>
+                  <span class="opt-badge" id="badge-q2-any"></span>
+                </button>
+              </div>
+              <div class="feedback" id="q2-feedback"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="feedback" id="act2-feedback"></div>
+        <div style="margin-top:18px; display:flex; justify-content:space-between;">
+          <button class="btn" onclick="switchAct(1)">&larr; Back</button>
+          <button class="btn btn-primary" id="btn-to-act3" disabled onclick="unlockAndGo(3)">Enter JVM Stack Lab &rarr;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT III: STACK UNWINDING & FINALLY LAB -->
+    <section class="act-screen" id="act-3">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">03. JVM Call Stack &amp; The <code>finally</code> Alibi</div>
+          <span class="stat-pill" style="padding:4px 10px;">Stack Trace: <span id="stack-status">Not Inspected</span></span>
+        </div>
+        <div class="noir-quote">
+          "Suspect A claims: <em>'Even if someone put a <code>return</code> statement inside the <code>try</code> block, <code>finally</code> would be skipped and the lock would still leak!'</em> Let's trace the JVM call stack first, then put that alibi to the test."
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="font-size:0.9rem; color:var(--cyan);">Step 1: Call Stack Unwinding Trace</strong>
+              <div style="display:flex; gap:6px;">
+                <button class="btn" style="padding:5px 10px; font-size:0.78rem;" onclick="stepStack()">Step Frame &rarr;</button>
+                <button class="btn" style="padding:5px 10px; font-size:0.78rem;" onclick="resetStack()">Reset</button>
+              </div>
+            </div>
+            <div class="stack-container" id="stack-visual">
+              <div class="stack-frame" id="frame-0">
+                <strong>Frame 0 (Bottom):</strong> <code>MainController.handleApiRequest()</code><br/>
+                <span style="color:var(--text-muted);">Waiting for transferFunds() to return...</span>
+              </div>
+              <div class="stack-frame" id="frame-1">
+                <strong>Frame 1 (Middle):</strong> <code>VaultTransferService.transferFunds()</code><br/>
+                <span style="color:var(--text-muted);">Has catch(Exception e) {} — Danger Zone!</span>
+              </div>
+              <div class="stack-frame" id="frame-2">
+                <strong>Frame 2 (Top):</strong> <code>RemoteLedger.syncRemote()</code><br/>
+                <span style="color:var(--text-muted);">Ready to execute network I/O...</span>
+              </div>
+            </div>
+            <div class="feedback show info" id="stack-narration" style="margin-top:8px;">
+              Click <strong>Step Frame &rarr;</strong> through all 3 frames to watch how the JVM unwinds the call stack when <code>IOException</code> is thrown.
+            </div>
+          </div>
+
+          <div>
+            <strong style="font-size:0.9rem; color:var(--amber); display:block; margin-bottom:8px;">Step 2: The <code>try-return-finally</code> Alibi Test</strong>
+            <pre><span class="kw">public</span> <span class="type">String</span> <span class="fn">checkVaultStatus</span>(<span class="type">VaultLock</span> lock) {
+  <span class="kw">try</span> {
+    lock.<span class="fn">acquire</span>();
+    <span class="kw">return</span> <span class="str">"OK"</span>; <span class="cmt">// Early return!</span>
+  } <span class="kw">finally</span> {
+    lock.<span class="fn">close</span>();  <span class="cmt">// Does this execute?</span>
+  }
+}</pre>
+            <p style="font-size:0.88rem; margin:12px 0 8px;">What happens when <code>checkVaultStatus(lock)</code> runs?</p>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <button class="btn opt-btn" data-q="fin" data-choice="runs" onclick="testFinally('runs', this)">
+                <span>A) <code>finally</code> runs <code>lock.close()</code> BEFORE returning <code>"OK"</code></span>
+                <span class="opt-badge" id="badge-fin-runs"></span>
+              </button>
+              <button class="btn opt-btn" data-q="fin" data-choice="skipped" onclick="testFinally('skipped', this)">
+                <span>B) <code>return "OK"</code> exits immediately; <code>finally</code> is skipped</span>
+                <span class="opt-badge" id="badge-fin-skipped"></span>
+              </button>
+              <button class="btn opt-btn" data-q="fin" data-choice="compile" onclick="testFinally('compile', this)">
+                <span>C) Compiler error: unreachable code in <code>finally</code></span>
+                <span class="opt-badge" id="badge-fin-compile"></span>
+              </button>
+            </div>
+            <div class="feedback" id="finally-feedback"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px; display:flex; justify-content:space-between;">
+          <button class="btn" onclick="switchAct(2)">&larr; Back</button>
+          <button class="btn btn-primary" id="btn-to-act4" disabled onclick="unlockAndGo(4)">Draft Final Patch Warrant &rarr;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACT IV: THE WARRANT -->
+    <section class="act-screen" id="act-4">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">04. The Arrest Warrant — Patch <code>transferFunds()</code></div>
+          <span class="badge-case" style="margin:0; color:var(--cyan); border-color:var(--cyan); background:var(--cyan-glow);">Java 17+ Best Practices</span>
+        </div>
+        <div class="noir-quote">
+          "Fix the leaky lock, catch the specific <code>IOException</code>, roll back the debit so money can't vanish, and wrap the root cause in a custom <code>TransferFailedException</code> so the stack trace is preserved."
+        </div>
+
+        <p style="font-size:0.86rem; color:var(--text-muted); margin-bottom:6px;">
+          Complete the method body using <strong>try-with-resources</strong>, specific exception handling, rollback, and exception chaining:
+        </p>
+
+        <div class="chip-bar">
+          <button class="code-chip" onclick="insertChip('try (VaultLock lock = new VaultLock()) {\n  ')">try (VaultLock lock = new VaultLock())</button>
+          <button class="code-chip" onclick="insertChip('catch (IOException e) {\n  ')">catch (IOException e)</button>
+          <button class="code-chip" onclick="insertChip('src.credit(amt);\n  ')">src.credit(amt);</button>
+          <button class="code-chip" onclick="insertChip('throw new TransferFailedException(&quot;Sync failed&quot;, e);\n')">throw new TransferFailedException("Sync failed", e);</button>
+        </div>
+
+        <textarea class="code-editor" id="java-editor" spellcheck="false">public void transferFunds(Account src, Account dst, double amt) {
+  try (VaultLock lock = new VaultLock()) {
+    lock.acquire();
+    src.debit(amt);
+    ledger.syncRemote(src, dst);
+    dst.credit(amt);
+  } catch (Exception e) {
+    // TODO: Catch IOException specifically, rollback src, and rethrow TransferFailedException with cause e!
+  }
+}</textarea>
+
+        <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="runPatchValidator()">Compile &amp; Run JVM Audit</button>
+          <button class="btn" onclick="resetEditor()">Reset Template</button>
+        </div>
+
+        <table class="test-table" id="audit-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Audit Check</th>
+              <th>Java Exception Concept</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="audit-body"></tbody>
+        </table>
+
+        <div class="feedback" id="act4-feedback"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- WARNING MODAL POP-UP -->
+  <div class="modal-backdrop" id="warning-modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-title" id="modal-title">&#9888; Inspection Required First</div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="modal-action-btn" onclick="closeWarningModal()">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      clues: new Set(),
+      inspected: new Set(),
+      q1Solved: false,
+      q2Solved: false,
+      stackStep: 0,
+      stackCompleted: false,
+      finallySolved: false,
+      unlockedAct: 1
+    };
+
+    const dossiers = {
+      io: `// Suspect A: java.io.IOException (Checked Exception)
+public class IOException extends Exception { ... }
+
+// COMPILER RULE:
+// Because IOException extends Exception (and NOT RuntimeException),
+// javac enforces the "Catch or Specify" requirement:
+public void syncRemote(Account a, Account b) throws IOException {
+    throw new IOException("Connection reset by peer");
+}`,
+      npe: `// Suspect B: java.lang.NullPointerException (Unchecked)
+public class NullPointerException extends RuntimeException { ... }
+
+// COMPILER RULE:
+// Subclasses of RuntimeException are unchecked. Methods do NOT need
+// to declare 'throws NullPointerException' in their signature.
+// Usually caused by programmer bugs rather than external I/O failure.`,
+      oom: `// Suspect C: java.lang.OutOfMemoryError (JVM Error)
+public class OutOfMemoryError extends VirtualMachineError { ... }
+
+// JVM RULE:
+// Extends java.lang.Error. Represents catastrophic JVM failure.
+// Application code should NEVER catch Error or Throwable broadly.`,
+      fnf: `// Suspect D: java.io.FileNotFoundException (Checked Subclass)
+public class FileNotFoundException extends IOException { ... }
+
+// INHERITANCE & CATCH ORDER RULE:
+// Because FileNotFoundException IS-A IOException, catching IOException
+// first would make a subsequent catch(FileNotFoundException) unreachable!
+// javac rejects unreachable catch blocks at compile time.`
+    };
+
+    function showWarningModal(title, message, btnText, onAction) {
+      document.getElementById('modal-title').innerHTML = `&#9888; ${title}`;
+      document.getElementById('modal-body').innerHTML = message;
+      const btn = document.getElementById('modal-action-btn');
+      btn.textContent = btnText || 'Inspect Now';
+      btn.onclick = () => {
+        closeWarningModal();
+        if (typeof onAction === 'function') onAction();
+      };
+      document.getElementById('warning-modal').classList.add('show');
+    }
+
+    function closeWarningModal() {
+      document.getElementById('warning-modal').classList.remove('show');
+    }
+
+    function closeModalOnBackdrop(e) {
+      if (e.target.id === 'warning-modal') closeWarningModal();
+    }
+
+    function switchAct(num) {
+      if (num > state.unlockedAct) return;
+      document.querySelectorAll('.act-screen').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.act-tab').forEach(el => el.classList.remove('active'));
+      document.getElementById(`act-${num}`).classList.add('active');
+      document.getElementById(`tab-${num}`).classList.add('active');
+    }
+
+    function unlockAndGo(num) {
+      if (num > state.unlockedAct) {
+        state.unlockedAct = num;
+        document.getElementById(`tab-${num}`).classList.remove('locked');
+      }
+      document.getElementById(`tab-${num - 1}`).classList.add('completed');
+      switchAct(num);
+    }
+
+    // ACT I
+    function discoverClue(id) {
+      state.clues.add(id);
+      document.getElementById(`clue-${id}`).classList.add('discovered');
+      document.getElementById('clue-count').textContent = `${state.clues.size}/3`;
+      if (state.clues.size === 3) {
+        const fb = document.getElementById('act1-feedback');
+        fb.className = 'feedback show success';
+        fb.innerHTML = '<strong>All 3 Forensic Anomalies Logged!</strong> You found the swallowed <code>Exception</code>, the leaked <code>AutoCloseable</code> lock, and the non-atomic balance state. Proceed to the <code>Throwable</code> lineup.';
+        document.getElementById('btn-to-act2').disabled = false;
+      }
+    }
+
+    // ACT II
+    function inspectSuspect(key) {
+      state.inspected.add(key);
+      document.querySelectorAll('.suspect-card').forEach(c => c.classList.remove('selected'));
+      const card = document.getElementById(`card-${key}`);
+      card.classList.add('selected', 'inspected');
+      document.getElementById('inspected-count').textContent = `${state.inspected.size}/4`;
+      document.getElementById('dossier-box').style.display = 'block';
+      document.getElementById('dossier-code').textContent = dossiers[key];
+    }
+
+    function ensureAllSuspectsInspected() {
+      if (state.inspected.size < 4) {
+        const names = {
+          io: 'Suspect A (IOException)',
+          npe: 'Suspect B (NullPointerException)',
+          oom: 'Suspect C (OutOfMemoryError)',
+          fnf: 'Suspect D (FileNotFoundException)'
+        };
+        const missingKeys = Object.keys(names).filter(k => !state.inspected.has(k));
+        const missingList = missingKeys.map(k => `<strong>${names[k]}</strong>`).join(', ');
+        showWarningModal(
+          'Uninspected Suspects Remaining',
+          `You have only inspected <strong>${state.inspected.size}/4</strong> dossiers in the <code>Throwable</code> lineup.<br/><br/>Inspect ${missingList} before answering the interrogation checks.`,
+          `Inspect ${names[missingKeys[0]]}`,
+          () => inspectSuspect(missingKeys[0])
+        );
+        return false;
+      }
+      return true;
+    }
+
+    function markOptionState(questionPrefix, chosenKey, isCorrect) {
+      const btn = document.querySelector(`.opt-btn[data-q="${questionPrefix}"][data-choice="${chosenKey}"]`);
+      const badge = document.getElementById(`badge-${questionPrefix}-${chosenKey}`);
+      if (!btn) return;
+
+      if (isCorrect) {
+        btn.classList.remove('wrong-selected');
+        btn.classList.add('correct-selected');
+        if (badge) badge.textContent = '✓ CORRECT';
+      } else {
+        btn.classList.remove('wrong-selected');
+        void btn.offsetWidth; // trigger reflow so shake replays on repeat clicks
+        btn.classList.add('wrong-selected');
+        if (badge) badge.textContent = '✗ INCORRECT';
+      }
+    }
+
+    function answerQ1(choice, btnEl) {
+      if (!ensureAllSuspectsInspected()) return;
+      const fb = document.getElementById('q1-feedback');
+
+      if (choice === 'io') {
+        markOptionState('q1', 'io', true);
+        state.q1Solved = true;
+        fb.className = 'feedback show success';
+        fb.innerHTML = '<strong>Correct!</strong> <code>IOException</code> is a <strong>checked exception</strong>, so <code>javac</code> forces the caller to catch or declare it.';
+      } else if (choice === 'npe') {
+        markOptionState('q1', 'npe', false);
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>Wrong:</strong> <code>NullPointerException</code> extends <code>RuntimeException</code> (unchecked). <code>javac</code> never forces you to catch or declare it.';
+      } else {
+        markOptionState('q1', 'oom', false);
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>Wrong:</strong> <code>OutOfMemoryError</code> extends <code>Error</code> (unchecked). <code>javac</code> does not require a <code>try-catch</code> for JVM errors.';
+      }
+      checkAct2Complete();
+    }
+
+    function answerQ2(choice, btnEl) {
+      if (!ensureAllSuspectsInspected()) return;
+      const fb = document.getElementById('q2-feedback');
+
+      if (choice === 'fnf') {
+        markOptionState('q2', 'fnf', true);
+        state.q2Solved = true;
+        fb.className = 'feedback show success';
+        fb.innerHTML = '<strong>Correct!</strong> Most specific subclass (<code>FileNotFoundException</code>) must come before its parent (<code>IOException</code>), or <code>javac</code> throws an unreachable catch error.';
+      } else if (choice === 'io') {
+        markOptionState('q2', 'io', false);
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>Compiler Error!</strong> Catching <code>IOException</code> first intercepts all <code>FileNotFoundException</code> instances, making the second catch block unreachable.';
+      } else {
+        markOptionState('q2', 'any', false);
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>Compiler Error!</strong> Java strictly enforces subclass-before-superclass ordering in multi-catch hierarchies.';
+      }
+      checkAct2Complete();
+    }
+
+    function checkAct2Complete() {
+      if (state.q1Solved && state.q2Solved) {
+        const fb = document.getElementById('act2-feedback');
+        fb.className = 'feedback show success';
+        fb.innerHTML = '<strong>Lineup Verified!</strong> You proved <code>IOException</code> triggered the compile-time catch requirement and mastered Java exception hierarchy ordering.';
+        document.getElementById('btn-to-act3').disabled = false;
+      }
+    }
+
+    // ACT III
+    function stepStack() {
+      state.stackStep = Math.min(state.stackStep + 1, 3);
+      const nar = document.getElementById('stack-narration');
+      const status = document.getElementById('stack-status');
+
+      if (state.stackStep === 1) {
+        document.getElementById('frame-2').classList.add('throwing');
+        status.textContent = '1/3 Frames';
+        nar.className = 'feedback show error';
+        nar.innerHTML = '<strong>Frame 2 (syncRemote):</strong> Network drops! JVM creates an <code>IOException</code> object and searches for a handler. None found here—popping Frame 2!';
+      } else if (state.stackStep === 2) {
+        document.getElementById('frame-1').classList.add('swallowed');
+        status.textContent = '2/3 Frames';
+        nar.className = 'feedback show error';
+        nar.innerHTML = '<strong>Frame 1 (transferFunds):</strong> Unwinding hits <code>catch (Exception e) {}</code>! The empty block catches and silences the exception instead of propagating it.';
+      } else if (state.stackStep === 3) {
+        document.getElementById('frame-0').classList.add('unreached');
+        state.stackCompleted = true;
+        status.textContent = 'Inspected (3/3)';
+        nar.className = 'feedback show info';
+        nar.innerHTML = '<strong>Frame 0 (MainController):</strong> Never notified! Because Frame 1 swallowed the exception, <code>MainController</code> assumes the transfer succeeded. Now complete Step 2!';
+        checkAct3Complete();
+      }
+    }
+
+    function resetStack() {
+      state.stackStep = 0;
+      ['frame-0', 'frame-1', 'frame-2'].forEach(id => {
+        document.getElementById(id).className = 'stack-frame';
+      });
+      document.getElementById('stack-status').textContent = state.stackCompleted ? 'Inspected (3/3)' : 'Not Inspected';
+      const nar = document.getElementById('stack-narration');
+      nar.className = 'feedback show info';
+      nar.innerHTML = 'Click <strong>Step Frame &rarr;</strong> to watch how the JVM unwinds the call stack when <code>IOException</code> is thrown.';
+    }
+
+    function ensureStackInspected() {
+      if (!state.stackCompleted) {
+        showWarningModal(
+          'Inspect the JVM Call Stack First',
+          `You haven't finished tracing the call stack unwinding in <strong>Step 1</strong> yet (currently at <strong>${state.stackStep}/3</strong> frames).<br/><br/>Step through all 3 stack frames first so you can see how the JVM unwinds exceptions before testing the <code>finally</code> alibi.`,
+          'Step Next Frame Now',
+          () => stepStack()
+        );
+        return false;
+      }
+      return true;
+    }
+
+    function testFinally(choice) {
+      if (!ensureStackInspected()) return;
+      const fb = document.getElementById('finally-feedback');
+
+      if (choice === 'runs') {
+        markOptionState('fin', 'runs', true);
+        state.finallySolved = true;
+        fb.className = 'feedback show success';
+        fb.innerHTML = '<strong>Alibi Destroyed!</strong> In Java, <code>finally</code> ALWAYS executes before the method returns to its caller (unless <code>System.exit()</code> is called or the JVM crashes). Even better: <code>try-with-resources</code> generates this cleanup automatically via <code>AutoCloseable.close()</code>.';
+        checkAct3Complete();
+      } else if (choice === 'skipped') {
+        markOptionState('fin', 'skipped', false);
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>False Alibi!</strong> A <code>return</code> inside <code>try</code> evaluates the return value, runs the <code>finally</code> block to close resources, and only then exits the method.';
+      } else {
+        markOptionState('fin', 'compile', false);
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>Incorrect:</strong> This compiles cleanly in Java. The compiler guarantees <code>finally</code> runs on normal return as well as on thrown exceptions.';
+      }
+    }
+
+    function checkAct3Complete() {
+      if (state.stackCompleted && state.finallySolved) {
+        document.getElementById('btn-to-act4').disabled = false;
+      }
+    }
+
+    // ACT IV
+    function insertChip(text) {
+      const ed = document.getElementById('java-editor');
+      const start = ed.selectionStart;
+      const end = ed.selectionEnd;
+      ed.value = ed.value.substring(0, start) + text + ed.value.substring(end);
+      ed.focus();
+      ed.selectionStart = ed.selectionEnd = start + text.length;
+    }
+
+    function resetEditor() {
+      document.getElementById('java-editor').value = `public void transferFunds(Account src, Account dst, double amt) {
+  try (VaultLock lock = new VaultLock()) {
+    lock.acquire();
+    src.debit(amt);
+    ledger.syncRemote(src, dst);
+    dst.credit(amt);
+  } catch (Exception e) {
+    // TODO: Catch IOException specifically, rollback src, and rethrow TransferFailedException with cause e!
+  }
+}`;
+      document.getElementById('audit-table').style.display = 'none';
+      document.getElementById('act4-feedback').className = 'feedback';
+    }
+
+    function runPatchValidator() {
+      const raw = document.getElementById('java-editor').value;
+      const clean = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      const checks = [
+        {
+          label: 'Automatic Resource Cleanup',
+          concept: 'try (VaultLock lock = new VaultLock())',
+          passed: /try\s*\(\s*VaultLock\s+\w+\s*=\s*new\s+VaultLock\s*\(\s*\)\s*\)/.test(clean)
+        },
+        {
+          label: 'Specific Exception Catching',
+          concept: 'catch (IOException e) instead of broad Exception',
+          passed: /catch\s*\(\s*IOException\s+\w+\s*\)/.test(clean) && !/catch\s*\(\s*Exception\s+/.test(clean)
+        },
+        {
+          label: 'Atomic Balance Rollback',
+          concept: 'src.credit(amt) inside catch block',
+          passed: /catch\s*\([^)]+\)\s*\{[\s\S]*src\.credit\s*\(\s*amt\s*\)\s*;[\s\S]*\}/.test(clean)
+        },
+        {
+          label: 'Exception Chaining (Preserve Cause)',
+          concept: 'throw new TransferFailedException(..., e)',
+          passed: /throw\s+new\s+TransferFailedException\s*\([^)]*,\s*\w+\s*\)\s*;/.test(clean)
+        }
+      ];
+
+      const tbody = document.getElementById('audit-body');
+      tbody.innerHTML = '';
+      let allPassed = true;
+
+      checks.forEach(c => {
+        if (!c.passed) allPassed = false;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${c.label}</td>
+          <td><code>${c.concept}</code></td>
+          <td class="${c.passed ? 'pass' : 'fail'}">${c.passed ? 'PASS' : 'FAIL'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('audit-table').style.display = 'table';
+      const fb = document.getElementById('act4-feedback');
+
+      if (allPassed) {
+        document.getElementById('tab-4').classList.add('completed');
+        document.getElementById('detective-rank').textContent = 'Principal JVM Detective';
+        fb.className = 'feedback show success';
+        fb.innerHTML = `
+          <strong>CASE CLOSED — WARRANT EXECUTED!</strong><br/>
+          Your patch guarantees <code>VaultLock.close()</code> runs via <code>try-with-resources</code>, catches <code>IOException</code> specifically, rolls back <code>src.credit(amt)</code>, and preserves the full stack trace via exception chaining.<br/>
+          <em>Rank Promoted: Principal JVM Detective!</em>
+        `;
+      } else {
+        fb.className = 'feedback show error';
+        fb.innerHTML = '<strong>Patch Rejected by JVM Audit:</strong> Review the failed checks in the table above. Make sure you catch <code>IOException</code> (not broad <code>Exception</code>), roll back <code>src.credit(amt)</code>, and pass <code>e</code> as the cause to <code>TransferFailedException</code>.';
+      }
+    }
+  </script>
+</body>
+</html>
